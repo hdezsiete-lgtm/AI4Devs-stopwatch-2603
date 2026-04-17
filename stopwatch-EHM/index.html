@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>CHRONO — Timer & Countdown</title>
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Google Fonts: Orbitron (LED/futurista) + DM Sans (UI) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet" />
+
+  <!-- Tailwind config personalizado -->
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            display: ['Orbitron', 'monospace'],
+            ui: ['DM Sans', 'sans-serif'],
+          },
+          colors: {
+            neon: {
+              cyan:  '#00f5ff',
+              green: '#39ff14',
+              red:   '#ff2d55',
+              amber: '#ffb800',
+            },
+            dark: {
+              900: '#050508',
+              800: '#0b0b12',
+              700: '#111120',
+              600: '#181828',
+              500: '#22223a',
+            }
+          },
+          boxShadow: {
+            'neon-cyan':  '0 0 20px #00f5ff55, 0 0 60px #00f5ff22',
+            'neon-green': '0 0 20px #39ff1455, 0 0 60px #39ff1422',
+            'neon-red':   '0 0 20px #ff2d5555, 0 0 60px #ff2d5522',
+            'neon-amber': '0 0 20px #ffb80055, 0 0 60px #ffb80022',
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    /* ── Reset & base ─────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --accent: #00f5ff;
+      --accent-glow: #00f5ff55;
+      --bg: #050508;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      background-color: var(--bg);
+      font-family: 'DM Sans', sans-serif;
+      min-height: 100svh;
+      overflow-x: hidden;
+      color: #e2e8f0;
+    }
+
+    /* ── Fondo animado con grid ──────────────────── */
+    .grid-bg {
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(0,245,255,.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0,245,255,.04) 1px, transparent 1px);
+      background-size: 48px 48px;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* Vignette sobre el grid */
+    .grid-bg::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(ellipse 80% 60% at 50% 50%, transparent 30%, #050508 100%);
+    }
+
+    /* ── Glow orb de fondo ───────────────────────── */
+    .bg-orb {
+      position: fixed;
+      border-radius: 50%;
+      filter: blur(120px);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* ── Pantalla LED principal ──────────────────── */
+    .led-display {
+      font-family: 'Orbitron', monospace;
+      font-weight: 900;
+      letter-spacing: 0.06em;
+      text-shadow:
+        0 0 10px var(--accent),
+        0 0 30px var(--accent-glow),
+        0 0 80px var(--accent-glow);
+      transition: color .3s, text-shadow .3s;
+      line-height: 1;
+    }
+
+    /* Variante roja para cuenta atrás crítica */
+    .led-display.critical {
+      --accent: #ff2d55;
+      --accent-glow: #ff2d5555;
+      animation: pulse-critical .5s ease-in-out infinite alternate;
+    }
+
+    @keyframes pulse-critical {
+      from { text-shadow: 0 0 10px #ff2d55, 0 0 30px #ff2d5555; }
+      to   { text-shadow: 0 0 20px #ff2d55, 0 0 70px #ff2d5577, 0 0 120px #ff2d5533; }
+    }
+
+    /* ── Separador de dígitos (parpadeo) ─────────── */
+    .colon-blink { animation: blink 1s step-end infinite; }
+
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: .15; }
+    }
+
+    /* ── Botones de acción ───────────────────────── */
+    .btn-action {
+      position: relative;
+      overflow: hidden;
+      transition: transform .15s, box-shadow .25s;
+      font-family: 'DM Sans', sans-serif;
+      font-weight: 500;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      font-size: .7rem;
+    }
+
+    .btn-action::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: rgba(255,255,255,.07);
+      opacity: 0;
+      transition: opacity .2s;
+    }
+
+    .btn-action:hover::before   { opacity: 1; }
+    .btn-action:active { transform: scale(.96); }
+
+    /* Ripple */
+    .btn-action .ripple {
+      position: absolute;
+      border-radius: 50%;
+      background: rgba(255,255,255,.25);
+      transform: scale(0);
+      animation: ripple-anim .5s linear;
+      pointer-events: none;
+    }
+
+    @keyframes ripple-anim {
+      to { transform: scale(4); opacity: 0; }
+    }
+
+    /* ── Tabs ────────────────────────────────────── */
+    .tab-pill {
+      font-family: 'DM Sans', sans-serif;
+      font-size: .7rem;
+      font-weight: 500;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      transition: all .25s;
+      cursor: pointer;
+      border: 1px solid transparent;
+    }
+
+    .tab-pill.active {
+      border-color: var(--accent);
+      color: var(--accent);
+      box-shadow: 0 0 12px var(--accent-glow), inset 0 0 12px rgba(0,245,255,.06);
+    }
+
+    /* ── Inputs configuración ────────────────────── */
+    .time-input {
+      font-family: 'Orbitron', monospace;
+      background: #111120;
+      border: 1px solid #2a2a45;
+      color: #e2e8f0;
+      text-align: center;
+      font-weight: 700;
+      transition: border-color .2s, box-shadow .2s;
+    }
+
+    .time-input:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 2px var(--accent-glow);
+    }
+
+    /* Flecha spin oculta */
+    .time-input::-webkit-inner-spin-button,
+    .time-input::-webkit-outer-spin-button { -webkit-appearance: none; }
+    .time-input[type=number] { -moz-appearance: textfield; }
+
+    /* ── Progress ring ───────────────────────────── */
+    .progress-ring-circle {
+      transition: stroke-dashoffset .5s cubic-bezier(.4,0,.2,1), stroke .3s;
+      transform-origin: 50% 50%;
+      transform: rotate(-90deg);
+    }
+
+    /* ── Panel de tarjeta ────────────────────────── */
+    .card-panel {
+      background: linear-gradient(135deg, #0b0b1299 0%, #111120bb 100%);
+      border: 1px solid rgba(0,245,255,.12);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+    }
+
+    /* ── Animación entrada ───────────────────────── */
+    @keyframes fadeUp {
+      from { opacity: 0; transform: translateY(24px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .fade-up { animation: fadeUp .6s cubic-bezier(.16,1,.3,1) both; }
+    .fade-up-2 { animation: fadeUp .6s .1s cubic-bezier(.16,1,.3,1) both; }
+    .fade-up-3 { animation: fadeUp .6s .2s cubic-bezier(.16,1,.3,1) both; }
+    .fade-up-4 { animation: fadeUp .6s .3s cubic-bezier(.16,1,.3,1) both; }
+
+    /* ── Alerta flash ────────────────────────────── */
+    @keyframes flash-overlay {
+      0%, 100% { opacity: 0; }
+      10%, 90%  { opacity: 1; }
+    }
+
+    .alert-flash {
+      position: fixed;
+      inset: 0;
+      background: rgba(255,45,85,.08);
+      pointer-events: none;
+      z-index: 50;
+      animation: flash-overlay .4s ease-in-out 3;
+    }
+
+    /* ── Laps ────────────────────────────────────── */
+    .lap-row {
+      animation: fadeUp .25s ease both;
+      border-bottom: 1px solid rgba(255,255,255,.05);
+    }
+
+    /* ── Scrollbar personalizado ─────────────────── */
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #2a2a45; border-radius: 2px; }
+
+    /* ── Responsive font LED ─────────────────────── */
+    @media (max-width: 400px) {
+      .led-responsive { font-size: 3.5rem !important; }
+    }
+  </style>
+</head>
+
+<body class="relative flex flex-col items-center justify-start min-h-svh">
+
+  <!-- Fondo grid futurista -->
+  <div class="grid-bg"></div>
+
+  <!-- Orbs de luz ambiental -->
+  <div class="bg-orb w-96 h-96 bg-neon-cyan opacity-5 top-[-10%] left-[-10%]"></div>
+  <div class="bg-orb w-64 h-64 bg-purple-600 opacity-5 bottom-[10%] right-[-5%]"></div>
+
+  <!-- ── CONTENEDOR PRINCIPAL ────────────────────── -->
+  <main class="relative z-10 w-full max-w-md mx-auto px-4 py-8 flex flex-col gap-6">
+
+    <!-- HEADER -->
+    <header class="fade-up flex items-center justify-between">
+      <div>
+        <h1 class="font-display text-xl font-black tracking-[.2em] text-white uppercase">Chrono</h1>
+        <p class="text-[10px] tracking-[.25em] text-slate-500 uppercase font-ui">Timer & Countdown</p>
+      </div>
+      <!-- Indicador de estado -->
+      <div id="status-badge" class="flex items-center gap-2 px-3 py-1.5 rounded-full border border-slate-700 text-slate-500 text-[10px] font-ui tracking-widest uppercase transition-all duration-300">
+        <span id="status-dot" class="w-1.5 h-1.5 rounded-full bg-slate-600 transition-colors duration-300"></span>
+        <span id="status-text">Listo</span>
+      </div>
+    </header>
+
+    <!-- TABS -->
+    <nav class="fade-up-2 flex gap-2 p-1 rounded-xl bg-dark-800 border border-slate-800">
+      <button id="tab-stopwatch" class="tab-pill active flex-1 py-2.5 rounded-lg text-center" onclick="switchMode('stopwatch')">
+        ⏱ Cronómetro
+      </button>
+      <button id="tab-countdown" class="tab-pill flex-1 py-2.5 rounded-lg text-center text-slate-500" onclick="switchMode('countdown')">
+        ⏳ Cuenta Atrás
+      </button>
+    </nav>
+
+    <!-- TARJETA PRINCIPAL -->
+    <div class="card-panel fade-up-3 rounded-3xl p-8 flex flex-col items-center gap-8">
+
+      <!-- Progress Ring + Display LED -->
+      <div class="relative flex items-center justify-center">
+        <!-- SVG Ring (visible solo en countdown) -->
+        <svg id="progress-svg" class="absolute" width="280" height="280" viewBox="0 0 280 280"
+             style="opacity:0; transition: opacity .4s;">
+          <!-- Pista de fondo -->
+          <circle cx="140" cy="140" r="126"
+            fill="none" stroke="rgba(0,245,255,.08)" stroke-width="3"/>
+          <!-- Arco de progreso -->
+          <circle id="progress-ring" class="progress-ring-circle" cx="140" cy="140" r="126"
+            fill="none"
+            stroke="#00f5ff"
+            stroke-width="3"
+            stroke-linecap="round"
+            stroke-dasharray="791.7"
+            stroke-dashoffset="0"/>
+        </svg>
+
+        <!-- Display LED -->
+        <div class="flex flex-col items-center gap-2">
+          <!-- Tiempo principal -->
+          <div id="main-display" class="led-display led-responsive text-neon-cyan"
+               style="font-size: 5rem;">
+            <span id="d-hours" class="hidden"></span><span id="d-colon-h" class="hidden colon-blink">:</span><span id="d-minutes">00</span><span class="colon-blink">:</span><span id="d-seconds">00</span>
+          </div>
+          <!-- Milisegundos (solo stopwatch) -->
+          <div id="ms-display" class="font-display text-2xl font-bold text-slate-600 tracking-widest">
+            .00
+          </div>
+        </div>
+      </div>
+
+      <!-- PANEL CONFIGURACIÓN COUNTDOWN (oculto por defecto) -->
+      <div id="countdown-config" class="hidden w-full flex flex-col gap-4">
+        <p class="text-[10px] tracking-[.2em] text-slate-500 uppercase text-center font-ui">Configurar tiempo</p>
+        <div class="flex items-center justify-center gap-3">
+          <!-- Horas -->
+          <div class="flex flex-col items-center gap-1">
+            <button class="text-slate-600 hover:text-neon-cyan transition-colors text-xs py-1 px-2" onclick="incrementInput('cfg-h', 1)">▲</button>
+            <input id="cfg-h" class="time-input w-16 h-14 rounded-xl text-xl text-neon-cyan" type="number" min="0" max="23" value="0" />
+            <button class="text-slate-600 hover:text-neon-cyan transition-colors text-xs py-1 px-2" onclick="incrementInput('cfg-h', -1)">▼</button>
+            <span class="text-[9px] text-slate-600 tracking-widest uppercase font-ui">Hrs</span>
+          </div>
+          <span class="font-display text-3xl text-slate-700 font-bold pb-5">:</span>
+          <!-- Minutos -->
+          <div class="flex flex-col items-center gap-1">
+            <button class="text-slate-600 hover:text-neon-cyan transition-colors text-xs py-1 px-2" onclick="incrementInput('cfg-m', 1)">▲</button>
+            <input id="cfg-m" class="time-input w-16 h-14 rounded-xl text-xl text-neon-cyan" type="number" min="0" max="59" value="5" />
+            <button class="text-slate-600 hover:text-neon-cyan transition-colors text-xs py-1 px-2" onclick="incrementInput('cfg-m', -1)">▼</button>
+            <span class="text-[9px] text-slate-600 tracking-widest uppercase font-ui">Min</span>
+          </div>
+          <span class="font-display text-3xl text-slate-700 font-bold pb-5">:</span>
+          <!-- Segundos -->
+          <div class="flex flex-col items-center gap-1">
+            <button class="text-slate-600 hover:text-neon-cyan transition-colors text-xs py-1 px-2" onclick="incrementInput('cfg-s', 1)">▲</button>
+            <input id="cfg-s" class="time-input w-16 h-14 rounded-xl text-xl text-neon-cyan" type="number" min="0" max="59" value="0" />
+            <button class="text-slate-600 hover:text-neon-cyan transition-colors text-xs py-1 px-2" onclick="incrementInput('cfg-s', -1)">▼</button>
+            <span class="text-[9px] text-slate-600 tracking-widest uppercase font-ui">Seg</span>
+          </div>
+        </div>
+        <!-- Presets rápidos -->
+        <div class="flex gap-2 justify-center flex-wrap">
+          <button class="text-[10px] px-3 py-1.5 rounded-lg border border-slate-700 text-slate-500 hover:border-neon-cyan hover:text-neon-cyan transition-all font-ui tracking-widest"
+                  onclick="setPreset(0,1,0)">1 min</button>
+          <button class="text-[10px] px-3 py-1.5 rounded-lg border border-slate-700 text-slate-500 hover:border-neon-cyan hover:text-neon-cyan transition-all font-ui tracking-widest"
+                  onclick="setPreset(0,5,0)">5 min</button>
+          <button class="text-[10px] px-3 py-1.5 rounded-lg border border-slate-700 text-slate-500 hover:border-neon-cyan hover:text-neon-cyan transition-all font-ui tracking-widest"
+                  onclick="setPreset(0,10,0)">10 min</button>
+          <button class="text-[10px] px-3 py-1.5 rounded-lg border border-slate-700 text-slate-500 hover:border-neon-cyan hover:text-neon-cyan transition-all font-ui tracking-widest"
+                  onclick="setPreset(0,25,0)">25 min</button>
+          <button class="text-[10px] px-3 py-1.5 rounded-lg border border-slate-700 text-slate-500 hover:border-neon-cyan hover:text-neon-cyan transition-all font-ui tracking-widest"
+                  onclick="setPreset(1,0,0)">1 hora</button>
+        </div>
+      </div>
+
+      <!-- BOTONES ACCIÓN -->
+      <div id="controls" class="flex gap-3 w-full">
+        <!-- Start / Pause -->
+        <button id="btn-start"
+          class="btn-action flex-1 py-4 rounded-2xl bg-neon-cyan text-dark-900 font-bold shadow-neon-cyan"
+          onclick="toggleStartPause()">
+          <span id="btn-start-label">Iniciar</span>
+        </button>
+        <!-- Reset -->
+        <button id="btn-reset"
+          class="btn-action w-16 py-4 rounded-2xl border border-slate-700 text-slate-400 hover:border-slate-500 hover:text-white"
+          onclick="resetTimer()">
+          ↺
+        </button>
+        <!-- Lap (solo stopwatch) -->
+        <button id="btn-lap"
+          class="btn-action w-16 py-4 rounded-2xl border border-slate-700 text-slate-400 hover:border-neon-cyan hover:text-neon-cyan transition-colors"
+          onclick="addLap()">
+          ⊕
+        </button>
+      </div>
+
+    </div><!-- /card-panel -->
+
+    <!-- LAPS (solo stopwatch) -->
+    <div id="laps-panel" class="fade-up-4 card-panel rounded-2xl overflow-hidden hidden">
+      <div class="flex justify-between items-center px-5 py-3 border-b border-slate-800">
+        <span class="text-[10px] tracking-[.2em] text-slate-500 uppercase font-ui">Vueltas</span>
+        <button class="text-[10px] text-slate-600 hover:text-red-400 transition-colors font-ui uppercase tracking-widest" onclick="clearLaps()">Limpiar</button>
+      </div>
+      <div id="laps-list" class="max-h-52 overflow-y-auto divide-y divide-transparent px-5">
+        <!-- Las vueltas se insertan con JS -->
+      </div>
+    </div>
+
+    <!-- FOOTER -->
+    <footer class="text-center text-[10px] text-slate-700 font-ui tracking-widest uppercase fade-up-4">
+      Chrono &mdash; Premium Timer
+    </footer>
+
+  </main>
+
+  <!-- Overlay de alerta (se crea dinámicamente) -->
+
+  <!-- Script principal -->
+  <script src="script.js"></script>
+</body>
+</html>
